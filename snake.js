@@ -17,6 +17,8 @@ let gameInterval = null;
 let gameRunning = false;
 let currentSpeed = 140;
 let isPaused = false;
+// 防止同一幀內多次改變方向
+let directionChanged = false;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -179,14 +181,19 @@ function draw() {
 function update() {
     if (!gameRunning || isPaused) return;
 
+    // 重置方向鎖定
+    directionChanged = false;
+
     let head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
 
+    // 碰牆
     if (head.x < 0 || head.x >= WIDTH / GRID_SIZE || head.y < 0 || head.y >= HEIGHT / GRID_SIZE) {
         gameOver();
         return;
     }
 
-    if (snake.some(s => s.x === head.x && s.y === head.y)) {
+    // 撞自己（排除尾巴，因為尾巴這幀會消失）
+    if (snake.some((s, i) => i !== snake.length - 1 && s.x === head.x && s.y === head.y)) {
         gameOver();
         return;
     }
@@ -217,20 +224,25 @@ function gameOver() {
     clearInterval(gameInterval);
     gameInterval = null;
     gameRunning = false;
+    isPaused = false;
     updateStatus();
 
-    const name = prompt(`遊戲結束！你的分數是 ${score} 分\n輸入名字上排行榜：`, "玩家") || "勇者";
-    let leaderboard = JSON.parse(localStorage.getItem("snakeLeaderboard")) || [];
-    leaderboard.push({ name, score, date: new Date().toLocaleDateString() });
-    leaderboard.sort((a, b) => b.score - a.score);
-    leaderboard = leaderboard.slice(0, 10);
-    localStorage.setItem("snakeLeaderboard", JSON.stringify(leaderboard));
-    setTimeout(showLeaderboard, 300);
+    const name = prompt(`遊戲結束！你的分數是 ${score} 分\n輸入名字上排行榜：\n（按取消則不上榜）`, "玩家");
+
+    if (name !== null && name.trim() !== "") {
+        let leaderboard = JSON.parse(localStorage.getItem("snakeLeaderboard")) || [];
+        leaderboard.push({ name: name.trim(), score, date: new Date().toLocaleDateString() });
+        leaderboard.sort((a, b) => b.score - a.score);
+        leaderboard = leaderboard.slice(0, 10);
+        localStorage.setItem("snakeLeaderboard", JSON.stringify(leaderboard));
+        setTimeout(showLeaderboard, 300);
+    }
 }
 
 function startGame() {
     stopBackgroundMusic();
     if (gameInterval) clearInterval(gameInterval);
+    gameInterval = null;
 
     snake = [{ x: 16, y: 12 }];
     direction = { x: 1, y: 0 };
@@ -240,6 +252,7 @@ function startGame() {
     randomFood();
     gameRunning = true;
     isPaused = false;
+    directionChanged = false;
     gameInterval = setInterval(update, currentSpeed);
     draw();
     startBackgroundMusic();
@@ -291,7 +304,12 @@ function showLeaderboard() {
         </button>
     `;
 
+    // 移除舊的排行榜彈窗
+    const oldPopup = document.querySelector(".leaderboard-popup");
+    if (oldPopup) oldPopup.remove();
+
     const div = document.createElement("div");
+    div.className = "leaderboard-popup";
     div.style.cssText = `
         position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
         background:rgba(0,20,20,0.95);padding:25px;
@@ -308,27 +326,42 @@ function showLeaderboard() {
 // ========== 方向控制 ==========
 window.changeDirection = function(dx, dy) {
     if (!gameRunning || isPaused) return;
+    if (directionChanged) return; // 同一幀不重複改方向
     if (dx === -direction.x && dy === -direction.y) return;
     direction = { x: dx, y: dy };
+    directionChanged = true;
 };
 
 document.addEventListener("keydown", e => {
     if (!gameRunning || isPaused) return;
+    if (directionChanged) return;
     switch (e.key) {
         case "ArrowUp": case "w": case "W":
-            if (direction.y !== 1) direction = { x: 0, y: -1 };
+            if (direction.y !== 1) {
+                direction = { x: 0, y: -1 };
+                directionChanged = true;
+            }
             e.preventDefault();
             break;
         case "ArrowDown": case "s": case "S":
-            if (direction.y !== -1) direction = { x: 0, y: 1 };
+            if (direction.y !== -1) {
+                direction = { x: 0, y: 1 };
+                directionChanged = true;
+            }
             e.preventDefault();
             break;
         case "ArrowLeft": case "a": case "A":
-            if (direction.x !== 1) direction = { x: -1, y: 0 };
+            if (direction.x !== 1) {
+                direction = { x: -1, y: 0 };
+                directionChanged = true;
+            }
             e.preventDefault();
             break;
         case "ArrowRight": case "d": case "D":
-            if (direction.x !== -1) direction = { x: 1, y: 0 };
+            if (direction.x !== -1) {
+                direction = { x: 1, y: 0 };
+                directionChanged = true;
+            }
             e.preventDefault();
             break;
         case " ":
