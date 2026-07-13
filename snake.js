@@ -8,6 +8,7 @@ const statusText = document.getElementById("statusText");
 const WIDTH = 640;
 const HEIGHT = 480;
 const GRID_SIZE = 20;
+const MAX_GRIDS = (WIDTH / GRID_SIZE) * (HEIGHT / GRID_SIZE);
 
 let snake = [{ x: 16, y: 12 }];
 let direction = { x: 1, y: 0 };
@@ -17,8 +18,7 @@ let gameInterval = null;
 let gameRunning = false;
 let currentSpeed = 140;
 let isPaused = false;
-// 防止同一幀內多次改變方向
-let directionChanged = false;
+let gameOverTriggered = false; // 防止重複觸發 gameOver
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -38,27 +38,31 @@ function updateStatus() {
 
 // ========== 音效 ==========
 function playSound(type) {
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const oscillator = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    oscillator.connect(gain);
-    gain.connect(audioCtx.destination);
+    try {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const oscillator = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        oscillator.connect(gain);
+        gain.connect(audioCtx.destination);
 
-    if (type === "eat") {
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.25);
-        gain.gain.value = 0.35;
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.28);
-    } else if (type === "gameover") {
-        oscillator.type = "sawtooth";
-        oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.8);
-        gain.gain.value = 0.4;
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.9);
+        if (type === "eat") {
+            oscillator.type = "sine";
+            oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.25);
+            gain.gain.value = 0.35;
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.28);
+        } else if (type === "gameover") {
+            oscillator.type = "sawtooth";
+            oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.8);
+            gain.gain.value = 0.4;
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.9);
+        }
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.4);
+    } catch (e) {
+        // 音效失敗不影響遊戲
     }
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + 0.4);
 }
 
 // ========== 背景音樂 ==========
@@ -67,23 +71,27 @@ let isMusicPlaying = false;
 
 function startBackgroundMusic() {
     if (isMusicPlaying) return;
-    if (audioCtx.state === "suspended") audioCtx.resume();
+    try {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (e) {}
     isMusicPlaying = true;
     let note = 0;
     const melody = [262, 294, 330, 349, 392, 440, 494, 523];
     bgMusicInterval = setInterval(() => {
         if (!gameRunning || isPaused) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = "triangle";
-        osc.frequency.value = melody[note % melody.length];
-        gain.gain.value = 0.09;
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-        note++;
+        try {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = "triangle";
+            osc.frequency.value = melody[note % melody.length];
+            gain.gain.value = 0.09;
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+            note++;
+        } catch (e) {}
     }, 280);
 }
 
@@ -97,18 +105,46 @@ function stopBackgroundMusic() {
 
 // ========== 食物 ==========
 function randomFood() {
+    if (snake.length >= MAX_GRIDS) {
+        // 蛇佔滿地圖，直接勝利
+        gameWin();
+        return;
+    }
+
     let newFood;
+    let attempts = 0;
+    const maxAttempts = MAX_GRIDS * 2;
     do {
         newFood = {
             x: Math.floor(Math.random() * (WIDTH / GRID_SIZE)),
             y: Math.floor(Math.random() * (HEIGHT / GRID_SIZE))
         };
-    } while (snake.some(s => s.x === newFood.x && s.y === newFood.y));
+        attempts++;
+    } while (
+        attempts < maxAttempts &&
+        snake.some(s => s.x === newFood.x && s.y === newFood.y)
+    );
+
+    // 如果真的找不到空位（極端情況），遍歷找第一個空格
+    if (attempts >= maxAttempts) {
+        for (let x = 0; x < WIDTH / GRID_SIZE; x++) {
+            for (let y = 0; y < HEIGHT / GRID_SIZE; y++) {
+                if (!snake.some(s => s.x === x && s.y === y)) {
+                    newFood = { x, y };
+                    break;
+                }
+            }
+            if (newFood.x !== undefined) break;
+        }
+    }
     food = newFood;
 }
 
 // ========== 繪圖 ==========
 function draw() {
+    // 確保 food 存在
+    if (!food || food.x === undefined || food.y === undefined) return;
+
     ctx.fillStyle = "#000811";
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -128,6 +164,7 @@ function draw() {
     }
     ctx.lineWidth = 1;
 
+    // 蛇身
     snake.forEach((s, i) => {
         const alpha = Math.max(0.3, 0.95 - i * 0.03);
         if (i === 0) {
@@ -152,6 +189,7 @@ function draw() {
         }
     });
 
+    // 紅蘋果
     const fx = food.x * GRID_SIZE + GRID_SIZE / 2;
     const fy = food.y * GRID_SIZE + GRID_SIZE / 2;
 
@@ -179,10 +217,7 @@ function draw() {
 
 // ========== 遊戲邏輯 ==========
 function update() {
-    if (!gameRunning || isPaused) return;
-
-    // 重置方向鎖定
-    directionChanged = false;
+    if (!gameRunning || isPaused || gameOverTriggered) return;
 
     let head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
 
@@ -192,7 +227,7 @@ function update() {
         return;
     }
 
-    // 撞自己（排除尾巴，因為尾巴這幀會消失）
+    // 撞自己（排除尾巴最後一節）
     if (snake.some((s, i) => i !== snake.length - 1 && s.x === head.x && s.y === head.y)) {
         gameOver();
         return;
@@ -200,11 +235,17 @@ function update() {
 
     snake.unshift(head);
 
-    if (head.x === food.x && head.y === food.y) {
+    if (food && head.x === food.x && head.y === food.y) {
         score += 10;
         scoreElement.textContent = score;
         randomFood();
         playSound("eat");
+
+        // 檢查是否勝利
+        if (snake.length >= MAX_GRIDS) {
+            gameWin();
+            return;
+        }
 
         const targetSpeed = 140 - Math.floor(score / 50) * 8;
         if (targetSpeed !== currentSpeed && targetSpeed >= 60) {
@@ -218,7 +259,11 @@ function update() {
     draw();
 }
 
+// ========== 遊戲結束與勝利 ==========
 function gameOver() {
+    if (gameOverTriggered) return; // 防止重複觸發
+    gameOverTriggered = true;
+
     playSound("gameover");
     stopBackgroundMusic();
     clearInterval(gameInterval);
@@ -227,32 +272,70 @@ function gameOver() {
     isPaused = false;
     updateStatus();
 
-    const name = prompt(`遊戲結束！你的分數是 ${score} 分\n輸入名字上排行榜：\n（按取消則不上榜）`, "玩家");
+    setTimeout(() => {
+        const name = prompt(`遊戲結束！你的分數是 ${score} 分\n輸入名字上排行榜：\n（按取消則不上榜）`, "玩家");
 
-    if (name !== null && name.trim() !== "") {
-        let leaderboard = JSON.parse(localStorage.getItem("snakeLeaderboard")) || [];
-        leaderboard.push({ name: name.trim(), score, date: new Date().toLocaleDateString() });
-        leaderboard.sort((a, b) => b.score - a.score);
-        leaderboard = leaderboard.slice(0, 10);
-        localStorage.setItem("snakeLeaderboard", JSON.stringify(leaderboard));
-        setTimeout(showLeaderboard, 300);
-    }
+        if (name !== null && name.trim() !== "") {
+            try {
+                let leaderboard = JSON.parse(localStorage.getItem("snakeLeaderboard")) || [];
+                leaderboard.push({ name: name.trim(), score, date: new Date().toLocaleDateString() });
+                leaderboard.sort((a, b) => b.score - a.score);
+                leaderboard = leaderboard.slice(0, 10);
+                localStorage.setItem("snakeLeaderboard", JSON.stringify(leaderboard));
+                showLeaderboard();
+            } catch (e) {
+                // localStorage 可能滿了或被阻擋
+            }
+        }
+        gameOverTriggered = false;
+    }, 200);
 }
 
+function gameWin() {
+    if (gameOverTriggered) return;
+    gameOverTriggered = true;
+
+    stopBackgroundMusic();
+    clearInterval(gameInterval);
+    gameInterval = null;
+    gameRunning = false;
+    isPaused = false;
+    updateStatus();
+
+    setTimeout(() => {
+        alert(`🏆 恭喜！你填滿了整個地圖！\n最終分數：${score} 分`);
+        const name = prompt(`輸入名字上排行榜：`, "大師") || "大師";
+        if (name.trim() !== "") {
+            try {
+                let leaderboard = JSON.parse(localStorage.getItem("snakeLeaderboard")) || [];
+                leaderboard.push({ name: name.trim(), score: score + 1000, date: new Date().toLocaleDateString() });
+                leaderboard.sort((a, b) => b.score - a.score);
+                leaderboard = leaderboard.slice(0, 10);
+                localStorage.setItem("snakeLeaderboard", JSON.stringify(leaderboard));
+                showLeaderboard();
+            } catch (e) {}
+        }
+        gameOverTriggered = false;
+    }, 200);
+}
+
+// ========== 開始與暫停 ==========
 function startGame() {
     stopBackgroundMusic();
-    if (gameInterval) clearInterval(gameInterval);
-    gameInterval = null;
+    if (gameInterval) {
+        clearInterval(gameInterval);
+        gameInterval = null;
+    }
 
     snake = [{ x: 16, y: 12 }];
     direction = { x: 1, y: 0 };
     score = 0;
     currentSpeed = 140;
+    gameOverTriggered = false;
     scoreElement.textContent = score;
     randomFood();
     gameRunning = true;
     isPaused = false;
-    directionChanged = false;
     gameInterval = setInterval(update, currentSpeed);
     draw();
     startBackgroundMusic();
@@ -260,7 +343,7 @@ function startGame() {
 }
 
 function togglePause() {
-    if (!gameRunning) return;
+    if (!gameRunning || gameOverTriggered) return;
     isPaused = !isPaused;
     if (isPaused) {
         clearInterval(gameInterval);
@@ -272,8 +355,13 @@ function togglePause() {
     updateStatus();
 }
 
+// ========== 排行榜 ==========
 function showLeaderboard() {
-    let leaderboard = JSON.parse(localStorage.getItem("snakeLeaderboard")) || [];
+    let leaderboard = [];
+    try {
+        leaderboard = JSON.parse(localStorage.getItem("snakeLeaderboard")) || [];
+    } catch (e) {}
+
     let html = `
         <h2 style="color:#ffd700;text-shadow:0 0 20px #ffd700;margin-bottom:15px;">🏆 排行榜 Top 10</h2>
         <div style="max-height:350px;overflow-y:auto;">
@@ -304,7 +392,7 @@ function showLeaderboard() {
         </button>
     `;
 
-    // 移除舊的排行榜彈窗
+    // 移除舊彈窗
     const oldPopup = document.querySelector(".leaderboard-popup");
     if (oldPopup) oldPopup.remove();
 
@@ -318,6 +406,7 @@ function showLeaderboard() {
         text-align:center;
         box-shadow:0 0 60px rgba(0,255,170,0.5);
         backdrop-filter:blur(15px);
+        -webkit-backdrop-filter:blur(15px);
     `;
     div.innerHTML = html;
     document.body.appendChild(div);
@@ -325,43 +414,28 @@ function showLeaderboard() {
 
 // ========== 方向控制 ==========
 window.changeDirection = function(dx, dy) {
-    if (!gameRunning || isPaused) return;
-    if (directionChanged) return; // 同一幀不重複改方向
+    if (!gameRunning || isPaused || gameOverTriggered) return;
     if (dx === -direction.x && dy === -direction.y) return;
     direction = { x: dx, y: dy };
-    directionChanged = true;
 };
 
 document.addEventListener("keydown", e => {
-    if (!gameRunning || isPaused) return;
-    if (directionChanged) return;
+    if (!gameRunning || isPaused || gameOverTriggered) return;
     switch (e.key) {
         case "ArrowUp": case "w": case "W":
-            if (direction.y !== 1) {
-                direction = { x: 0, y: -1 };
-                directionChanged = true;
-            }
+            if (direction.y !== 1) direction = { x: 0, y: -1 };
             e.preventDefault();
             break;
         case "ArrowDown": case "s": case "S":
-            if (direction.y !== -1) {
-                direction = { x: 0, y: 1 };
-                directionChanged = true;
-            }
+            if (direction.y !== -1) direction = { x: 0, y: 1 };
             e.preventDefault();
             break;
         case "ArrowLeft": case "a": case "A":
-            if (direction.x !== 1) {
-                direction = { x: -1, y: 0 };
-                directionChanged = true;
-            }
+            if (direction.x !== 1) direction = { x: -1, y: 0 };
             e.preventDefault();
             break;
         case "ArrowRight": case "d": case "D":
-            if (direction.x !== -1) {
-                direction = { x: 1, y: 0 };
-                directionChanged = true;
-            }
+            if (direction.x !== -1) direction = { x: 1, y: 0 };
             e.preventDefault();
             break;
         case " ":
@@ -376,9 +450,10 @@ let touchStartX = 0, touchStartY = 0;
 canvas.addEventListener("touchstart", e => {
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
-});
+}, { passive: true });
+
 canvas.addEventListener("touchend", e => {
-    if (!gameRunning || isPaused) return;
+    if (!gameRunning || isPaused || gameOverTriggered) return;
     const dx = e.changedTouches[0].clientX - touchStartX;
     const dy = e.changedTouches[0].clientY - touchStartY;
     if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
@@ -387,9 +462,19 @@ canvas.addEventListener("touchend", e => {
     } else {
         changeDirection(0, dy > 0 ? 1 : -1);
     }
-});
+}, { passive: true });
+
+// 防止手機雙擊縮放
+document.addEventListener("dblclick", e => {
+    e.preventDefault();
+}, { passive: false });
 
 // ========== 初始化 ==========
-randomFood();
-draw();
-updateStatus();
+try {
+    randomFood();
+    draw();
+    updateStatus();
+} catch (e) {
+    console.error("初始化失敗:", e);
+    alert("遊戲載入失敗，請重新整理頁面");
+}
