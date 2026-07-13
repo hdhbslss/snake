@@ -1,0 +1,84 @@
+body {
+    font-family: "Microsoft YaHei", Arial, sans-serif;
+    background: linear-gradient(135deg, #0f001a, #001a11);
+    color: white;
+    margin: 0;
+    padding: 20px 0;
+    touch-action: manipulation;
+}
+
+.container {
+    max-width: 840px;
+    margin: 0 auto;
+    background: rgba(0, 20, 20, 0.85);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 0 40px rgba(0, 255, 180, 0.4);
+}
+
+h1 {
+    color: #00ffcc;
+    text-shadow: 0 0 20px #00ffcc;
+    margin: 0 0 15px 0;
+    font-size: 2.8em;
+}
+
+canvas {
+    border: 6px solid #00ffaa;
+    border-radius: 16px;
+    background: #000;
+    box-shadow: 0 0 50px rgba(0, 255, 170, 0.6);
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+.score {
+    font-size: 28px;
+    margin: 12px 0;
+    color: #00ffcc;
+    text-shadow: 0 0 12px #00ffcc;
+}
+
+.controls button {
+    padding: 12px 22px;
+    margin: 6px;
+    font-size: 17px;
+    background: linear-gradient(#00cc88, #009966);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    box-shadow: 0 5px 15px rgba(0, 204, 136, 0.5);
+}
+
+.controls button:hover { transform: translateY(-3px); }
+
+.dpad {
+    margin: 20px auto;
+    display: grid;
+    grid-template-areas: ". up ." "left . right" ". down .";
+    gap: 10px;
+    width: 250px;
+}
+
+.dpad button {
+    width: 75px;
+    height: 75px;
+    font-size: 36px;
+    background: rgba(0, 255, 170, 0.15);
+    color: #00ffaa;
+    border: 4px solid #00ffaa;
+    border-radius: 18px;
+}
+
+.dpad button:active {
+    background: #00ffaa;
+    color: #001100;
+    transform: scale(0.95);
+}
+
+@media (max-width: 768px) {
+    .dpad { width: 290px; }
+    .dpad button { width: 85px; height: 85px; font-size: 40px; }
+}
