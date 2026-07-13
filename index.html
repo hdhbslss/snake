@@ -9,20 +9,32 @@
 <body>
     <div class="container">
         <h1>🐍 無限霓虹貪吃蛇</h1>
-        <div class="score">分數: <span id="score">0</span></div>
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
-        
+
+        <div class="score-container">
+            <span class="score-label">⚡ 分數</span>
+            <span class="score-value" id="score">0</span>
+        </div>
+
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">尚未開始</span>
+        </div>
+
+        <div class="canvas-wrapper">
+            <canvas id="gameCanvas" width="640" height="480"></canvas>
+        </div>
+
         <div class="controls">
-            <button onclick="startGame()">開始遊戲</button>
-            <button onclick="togglePause()">暫停 / 繼續</button>
-            <button onclick="showLeaderboard()">🏆 排行榜</button>
+            <button class="btn" onclick="startGame()">🎮 開始遊戲</button>
+            <button class="btn" onclick="togglePause()">⏯️ 暫停/繼續</button>
+            <button class="btn btn-leaderboard" onclick="showLeaderboard()">🏆 排行榜</button>
         </div>
 
         <div class="dpad">
-            <button onclick="changeDirection(0, -1)" class="up">↑</button>
-            <button onclick="changeDirection(-1, 0)" class="left">←</button>
-            <button onclick="changeDirection(1, 0)" class="right">→</button>
-            <button onclick="changeDirection(0, 1)" class="down">↓</button>
+            <button onclick="changeDirection(0, -1)" class="up">▲</button>
+            <button onclick="changeDirection(-1, 0)" class="left">◀</button>
+            <button onclick="changeDirection(1, 0)" class="right">▶</button>
+            <button onclick="changeDirection(0, 1)" class="down">▼</button>
         </div>
     </div>
 
