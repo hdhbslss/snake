@@ -2,15 +2,17 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const scoreElement = document.getElementById("score");
 
-const WIDTH = 800, HEIGHT = 600, GRID_SIZE = 20;
+const WIDTH = 640;
+const HEIGHT = 480;
+const GRID_SIZE = 20;
 
-let snake = [{x: 20, y: 15}];
+let snake = [{x: 16, y: 12}];
 let direction = {x: 1, y: 0};
 let food = {};
 let score = 0;
 let gameInterval;
 let gameRunning = false;
-let currentSpeed = 100;
+let currentSpeed = 140;   // 變慢
 let isPaused = false;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -40,6 +42,7 @@ function playSound(type) {
     oscillator.stop(audioCtx.currentTime + 0.4);
 }
 
+// 背景音樂（同之前）
 let bgMusicInterval;
 let isMusicPlaying = false;
 
@@ -56,7 +59,7 @@ function startBackgroundMusic() {
         gain.connect(audioCtx.destination);
         osc.type = "triangle";
         osc.frequency.value = melody[note % melody.length];
-        gain.gain.value = 0.12;
+        gain.gain.value = 0.11;
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.35);
@@ -77,7 +80,7 @@ function draw() {
     ctx.fillStyle = "#000811";
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    ctx.strokeStyle = "rgba(0, 255, 180, 0.06)";
+    ctx.strokeStyle = "rgba(0, 255, 180, 0.08)";
     for (let x = 0; x < WIDTH; x += GRID_SIZE) {
         ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,HEIGHT); ctx.stroke();
     }
@@ -102,15 +105,11 @@ function draw() {
     ctx.arc(fx - 6, fy - 6, 6, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "#2e7d32";
-    ctx.lineWidth = 3.5;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(fx + 1, fy - GRID_SIZE/2 + 5);
-    ctx.quadraticCurveTo(fx + 6, fy - GRID_SIZE/2 - 3, fx + 4, fy - GRID_SIZE/2 - 8);
+    ctx.moveTo(fx, fy - GRID_SIZE/2 + 5);
+    ctx.quadraticCurveTo(fx + 5, fy - GRID_SIZE/2 - 4, fx + 3, fy - GRID_SIZE/2 - 8);
     ctx.stroke();
-    ctx.fillStyle = "#27ae60";
-    ctx.beginPath();
-    ctx.ellipse(fx + 7, fy - GRID_SIZE/2 + 1, 7, 4, -0.6, 0, Math.PI * 2);
-    ctx.fill();
 }
 
 function update() {
@@ -118,10 +117,11 @@ function update() {
 
     let head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
 
-    if (head.x < 0) head.x = Math.floor(WIDTH/GRID_SIZE)-1;
-    if (head.x >= WIDTH/GRID_SIZE) head.x = 0;
-    if (head.y < 0) head.y = Math.floor(HEIGHT/GRID_SIZE)-1;
-    if (head.y >= HEIGHT/GRID_SIZE) head.y = 0;
+    // 碰到牆壁直接死亡
+    if (head.x < 0 || head.x >= WIDTH/GRID_SIZE || head.y < 0 || head.y >= HEIGHT/GRID_SIZE) {
+        gameOver();
+        return;
+    }
 
     if (snake.some(s => s.x === head.x && s.y === head.y)) {
         gameOver();
@@ -136,8 +136,8 @@ function update() {
         randomFood();
         playSound("eat");
 
-        if (score % 30 === 0 && currentSpeed > 40) {
-            currentSpeed -= 10;
+        if (score % 25 === 0 && currentSpeed > 60) {
+            currentSpeed -= 8;
             clearInterval(gameInterval);
             gameInterval = setInterval(update, currentSpeed);
         }
@@ -162,10 +162,10 @@ function gameOver() {
 }
 
 function startGame() {
-    snake = [{x: 20, y: 15}];
+    snake = [{x: 16, y: 12}];
     direction = {x: 1, y: 0};
     score = 0;
-    currentSpeed = 100;
+    currentSpeed = 140;
     scoreElement.textContent = score;
     randomFood();
     gameRunning = true;
